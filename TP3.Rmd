@@ -1,0 +1,351 @@
+---
+title: "TP2 - Econometrics"
+name: "FEKNOUS Rostane"
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+# Importing libraries : 
+
+```{r}
+library(stats)
+library(forecast)
+library(ggplot2)
+```
+
+# Part 1 : Additional processes
+
+## Exercise 2 : Explosive process
+
+### 1. Simulate an explosive ARMA(p,q) process. You are free to select numbers for p and q.
+```{r}
+set.seed(123)
+#Generating a Gaussian white noises process : 
+wn <- rnorm(1000,0,1)
+#Generating the ARMA(p,q) process : 
+#Un processus explosif est un processus possédant au moins une racine autoregressive hors du cercle unité
+arma_process <- wn[1:2]
+for (t in 3:1000){
+  arma_process[t] = 1.2*arma_process[t-1] + wn[t] + 0.8*wn[t-1]
+}
+
+# Représentation graphique du résultat : 
+df <- data.frame(x = 1:1000, y = arma_process)
+arma_plot <- ggplot(df, aes(x = df$x, y = df$y, col = "Processus ARMA(1,1)\nExplosif généré")) + geom_line() + ggtitle("Processus ARMA(1,1) explosif") + xlab("Index (1~1000)") + ylab("Arma_process")
+arma_plot
+```
+<blockquote> On observe déjà graphiquement un premier résultat pour la question 2 étant l'abscence de stationnarité due à la divergence à partir d'un certain rang. Cette explosion est due au fait que la racine du polynome de la partie AR du processus est située à l'intérieur du cercle unitaire (On le verifiera par la suite). </blockquote>
+
+### 2. Verify your ARMA(p,q) process does not respect the required conditions to be stationary. Use all the tools you know to reply to this question.
+```{r}
+autocovariance_arma <- acf(arma_process, lag = 20, type = "covariance")
+autocorrelation_arma <- acf(arma_process, lag = 20, type = "correlation")
+pacf_arma <- pacf(arma_process, lag = 20)
+```
+<blockquote> </blockquote>
+
+```{r}
+#Circle <- arima(arma_process, order = c(1,0,1))
+#plot(Circle)
+```
+<blockquote> Un message d'erreur est renvoyé. Ce dernier provient du fait que la racine (1/1.2) du polynôme caractéristique de la partie AR du processus arma est située à l'interieur du cercle unitaire, au delà de ce que le plot peut représenter. Néanmoins, cela vient tout de même confirmer l'abscence de stationnarité du processus. </blockquote>
+
+On peut néanmoins procéder autrement pour représenter le cercle unitaire et les racines du polynôme caractéristique AR : 
+
+```{r}
+coeff_AR <- c(1,-1.2) # Coefficients du polynôme caractéristique AR
+coeff_MA <- c(1,0.8) # Coefficients du polynôme caractéristique MA
+AR_roots <- polyroot(coeff_AR)
+MA_roots <- polyroot(coeff_MA)
+
+AR_roots <- matrix(c(AR_roots)) 
+MA_roots <- matrix(c(MA_roots))
+
+par(mfrow = c(1,2))
+plot(
+  AR_roots,
+  ylim=c(-1, 1),
+  col = "red",
+  asp=1,
+  main="Racines AR",
+  panel.first=c(
+    lines(complex(modulus=1, argument=0.01*2*pi)^(0:100), col='blue'),
+    abline(h=0, col='black'),
+    abline(v=0, col='black')
+  )
+)
+
+plot(
+  MA_roots,
+  ylim=c(-1, 1),
+  col = "red",
+  asp=1,
+  main="Racines AR",
+  panel.first=c(
+    lines(complex(modulus=1, argument=0.01*2*pi)^(0:100), col='blue'),
+    abline(h=0, col='black'),
+    abline(v=0, col='black')
+  )
+)
+```
+<blockquote> Comme prévu, la racine du polynôme caractéristique AR est située à l'interieur du cercle unitaire. Ainsi, il y'a abscence de stationnarité. </blockquote> 
+
+### 3. Make a forecast over 12 periods ahead and plot the interval confidences. What do you observe. Is it aligned with the theory ?
+```{r}
+fc <- forecast(arma_process, level = c(0.95), h = 12)
+ggplot(df, aes(x = df$x, y = df$y, col = "Arma(1,1) Process")) + geom_line() + geom_line(aes(y= fc$fitted, col = " Arma(1,1) forecast")) + ggtitle("ARMA Comparison Forecast") + xlab("Index (1~1000)")+ylab("Arma_process")
+#plot(fc$level, col = "Blue", main = "Confidence Interval")
+```
+<blockquote> On observe une superposition des deux graphiques, ainsi le resultat est aligné avec la théorie. </blockquote> 
+
+```{r}
+plot(fc, xlim=c(1000,1013))
+```
+<blockquote> On observe enfin que la représentation graphique est comprise dans l'intervalle de confiance </blockquote>
+
+#Part 2 : Moving to real data
+
+## Exercise 3 : The French Consumer Price Index
+We continue the study of ARMA models using the US Producer Price Index (excluding fresh food and
+energy). The data are available since 1974 until now. Can the ARMA framework help us to model the
+dynamics of this key variable and anticipate its behavior ?
+
+### 1. Load the PPI data from your workspace. Convert and plot the time series. Can the producer prices index be modeled without any transformation ? Explain.
+```{r}
+PPI <- read.csv("usppi.csv" ,header = TRUE, sep = ",")
+PPI$Date <- as.Date(PPI$Date, format = "%m/%d/%Y")
+
+ggplot(PPI,aes(x = PPI$Date, y = PPI$usppi, col = "Us Product Price Index")) + geom_line() + xlab("Date") + ylab("Us PPI") + ggtitle("US Product Price Index over time")
+
+```
+<blockquote> On constate une croissance du prix de produit au cours du temps. Concernant la modélisation, elle n'est pas possible sans conversion car les objets initiaux dans le Dataframe ne sont pas de type date donc les valeurs ne sont pas reconnues et ne peuvent donc pas être utilisées pour le graphique. </blockquote>
+
+On peut également convertir le dataset en série temporelle : 
+
+```{r}
+PPI.ts=ts(data=PPI$usppi, start=c(1974,1, 15), end=c(2022, 10, 15), frequency = 12)
+head(PPI.ts, n = 24)
+```
+
+### 2. Calculate the monthly growth rate of the PPI between January 1981 and December 2021. Can the PPI inflation be modeled now with an ARMA(p,q) ?
+```{r}
+Monthly_gr <- data.frame(Date = PPI$Date[85:576], MGR = 0*PPI$usppi[85:576])
+for (i in 85:576){
+  Monthly_gr$MGR[i-84] <- (PPI$usppi[i] - PPI$usppi[i-1])/PPI$usppi[i-1]
+}
+
+MGR_plot <- ggplot(Monthly_gr, aes(x = Monthly_gr$Date, y = Monthly_gr$MGR, col = "Monthly growth rate representation"))  + geom_line() + xlab("Date") + ylab("MGR") + ggtitle("Monthly Growth Rate of PPI\n(January 1981~December 2021)")
+MGR_plot
+```
+<blockquote> On observe une allure stationnaire sur le graphique, il est alors possible de considérer le modèle ARMA(p,q) pour faire des prédictions. </blockquote>
+
+### 3. Identification : Use the ACF and the PACF to identify the most appropriate lags to model this inflation rate. We want to confront the previous result by calculating the information criteria.
+```{r}
+autocorrelation_MGR <- acf(Monthly_gr$MGR, lag = 20, type = "correlation")
+pacf_MGR <- pacf(Monthly_gr$MGR, lag = 20)
+
+autocorrelation_MGR
+pacf_MGR
+```
+<blockquote> Comme on considère un modèle ARMA, la partie autoregressif fait que l'on ne peut pas déterminer l'ordre du modèle sur le diagramme d'autocorrélations. On représente alors la PACF et on observe un pic significatif d'ordre 1 pour la partie autoregréssive.Pour la partie MA en revanche, on observe un dernier pic significatif à l'indice 7 sur le diagramme d'autocorrélations. Ainsi le modèle considéré est un ARMA(1,7) </blockquote>
+
+### 4. Using the arima.sim function calculate the likelihood values for different combination p and q. Calculate then the values of the Akaike and the Bayesian information criteria for all the couple p and q. Which combination of p and q is qualified according to the Akaike and the Bayesian criteria ?
+```{r}
+AR_order <- seq(0,4)
+MA_order <- seq(0,4)
+
+
+likelihood = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+AIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+BIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+
+for (p in AR_order) {
+  for (q in MA_order) {
+    model = arima(Monthly_gr$MGR, order = c(p,0,q))
+    likelihood[p,q] = model$loglik # On recup la log vraissemblance
+    AIC[p,q] = model$aic # On recupère l'AIC
+    BIC[p,q] = BIC(model) # On recupère le BIC
+  }
+}
+AIC
+#on observe une AIC minimale pour (4,3) : -4286.739
+BIC
+#on observe une BIC minimale pour (4,2) : -4249.368
+#Le second BIC le plus faible est pour (4,3) : -4248.952
+```
+<blockquote> En se basant sur les informations obtenues, on conclut que l'ordre du modèle ARMA(4,3) le plus vraissemblable en fonction des deux critères que sont L'AIC et le BIC. </blockquote> 
+
+### 5. Do they confirm the first result derived from the ACF and the PACF ?
+Note : It is not possible so far to determine exactly which specification provides the greatest
+performance in terms of fitting the observations. The following steps are devoted to answer to the
+following question : what is the best specification ?
+
+<blockquote> On observe que les resultats obtenus ne sont pas les mêmes que ceux observés dans la simulation précédente. En effet, l'acf et la pacf nous ont indiqué un modèle ARMA(1,7) tandis que l'AIC et le BIC nous ont indiqué un modèle ARMA(4,3). </blockquote>
+
+### 6. Estimation : Estimate the coefficients of the specification you selected in the previous question. To do so, use the package arima.sim. Calculate the yˆt and estimated residuals as well (ˆϵ).
+```{r}
+auto_arma43 <- arima(Monthly_gr$MGR, order = c(4,0,3))
+
+MGR <- Monthly_gr$MGR
+residus <- auto_arma43$residuals
+estimated_MGR <-(MGR - residus) #y_estimée = y_observée - ϵ 
+
+head(estimated_MGR)
+```
+
+### 7. Plot the simulated and the dependent variables within the same chart. Check the significance of the estimated coefficients. What do you conclude ? Its it possible to affirm that the estimated specification is the most relevant model to infer the behavior of the inflation dynamics ?
+```{r}
+Comparison_MGR_plot <- ggplot(Monthly_gr, aes(x = Monthly_gr$Date, y = Monthly_gr$MGR, col = "Observed MGR")) + geom_line() + geom_line(aes(y = estimated_MGR, col = "Estimated MGR")) + xlab("Date") + ylab("Mgr") + ggtitle("Monthly growth rate Comparison Chart")
+Comparison_MGR_plot
+```
+<blockquote> On constate qu'hormis quelques variations, il y'a quasi superposition des représentations graphiques. Le modèle estimé est donc très proche du modèle observé. Le modèle ARMA utilisé permet donc effectivement d'éffectuer des prédictions sur la série temporelle considérant p informations passée pour le modèle AR et q information passée pour le modèle MA </blockquote>
+
+### 8. Quality check : Explain the type of quality check we have to run to derive a robust conclusion regarding the estimated specification. Run the required quality checks seen during the class. Comment your results
+
+On commence par effectuer un test de Ljung-Box pour tester la dépendance du modèle : 
+```{r}
+Ljung_box <- Box.test(MGR, lag = 20, type = "Ljung-Box")
+Ljung_box
+```
+<blockquote> On constate que la p-value du test est inférieure à 0.05 et même 0.01. On peut alors affirmer avec un niveau de confiance de 99% que le modèle est autocorrélé. </blockquote> 
+
+Par la suite : 
+
+On considère la RMSE pour estimer l'errreur quadratique moyenne du modèle pour tester la précision de ce dernier.
+
+```{r}
+RMSE <- function(observed,predicted)
+{
+  rmse <- sqrt(mean((observed-predicted)^2))
+  rmse
+}
+Rmse <- RMSE(MGR,estimated_MGR) 
+Rmse # 0.003019579
+```
+<blockquote> On obtient une erreur quadratique moyenne de l'ordre de 10^-3, ce qui vient confirmer les hypothèses effectuées. Le modèle est précis comme on a pu l'observer sur le graphique de comparaison précedemment. </blockquote>
+
+### 9. Forecasting : We want to forecast the PPI on a monthly basis, over the next three months. Use the required R function available in R to produce the values yt+1,yt+2 and yt+3.
+
+```{r}
+fc <- forecast(estimated_MGR, level = c(95), h = 3)
+plot(fc,type= "l", xlim =c(490,496))
+```
+<blockquote> En observant les prédictions, on constate qu'elles sont cohérentes par rapport à la représentation graphique. Si on compare le graphique initiale et les prédictions, on constate que les prédictions s'inscrivent dans une continuité cohérente par rapport aux données. </blockquote>
+
+## Exercise 4 : The US stock market
+We consider the s&p500 price index. After calculating the monthly returns of stock index, over the whole
+period, analyze its behavior using the questions of the third exercise.
+
+### 1. Load the s&p500 data from your workspace. Convert and plot the time series. Can the producer prices index be modeled without any transformation ? Explain.
+```{r}
+Stockdata <- read.csv("us_stock_data.csv" ,header = TRUE, sep = ",")
+Stockdata$Date <- as.Date(Stockdata$Date, format = "%m/%d/%Y")
+
+ggplot(Stockdata,aes(x = Stockdata$Date, y = Stockdata$usindex, col = "Us Index")) + geom_line() + xlab("Date") + ylab("Us Index") + ggtitle("s&p500 price index over time")
+
+```
+<blockquote> On constate une croissance du prix s&p500 au cours du temps. </blockquote>
+
+On peut également convertir le dataset en série temporelle : 
+
+```{r}
+Stockdata.ts=ts(data=Stockdata$usindex, start=c(1990,1, 1), end=c(2022, 10, 1), frequency = 12)
+head(Stockdata.ts, n = 24)
+```
+
+### 2. Calculate the monthly growth rate of the Stockdata between January 1981 and December 2021. Can the Stockdata inflation be modeled now with an ARMA(p,q) ?
+```{r}
+Monthly_gr_usindex <- data.frame(Date = Stockdata$Date, MR = 0*Stockdata$usindex)
+for (i in 0:393){
+  Monthly_gr_usindex$MR[i] <- (Stockdata$usindex[i+1] - Stockdata$usindex[i])/Stockdata$usindex[i]
+}
+MR_plot <- ggplot(Monthly_gr_usindex, aes(x = Monthly_gr_usindex$Date, y = Monthly_gr_usindex$MR, col = "Monthly returns representation"))  + geom_line() + xlab("Date") + ylab("MR") + ggtitle("Monthly returns of s&p500")
+MR_plot
+```
+<blockquote> On observe une allure stationnaire sur le graphique, il est alors possible de considérer le modèle ARMA(p,q) pour faire des prédictions. </blockquote>
+
+### 3. Identification : Use the ACF and the PACF to identify the most appropriate lags to model this inflation rate. We want to confront the previous result by calculating the information criteria.
+```{r}
+autocorrelation_MR <- acf(Monthly_gr_usindex$MR, lag = 20, type = "correlation")
+pacf_MR <- pacf(Monthly_gr_usindex$MR, lag = 30)
+
+autocorrelation_MR
+pacf_MR
+```
+<blockquote> On obtient cette fois ci un modèle ARMA(22,0) </blockquote>
+
+### 4. Using the arima.sim function calculate the likelihood values for different combination p and q. Calculate then the values of the Akaike and the Bayesian information criteria for all the couple p and q. Which combination of p and q is qualified according to the Akaike and the Bayesian criteria ?
+```{r}
+AR_order <- seq(0,4)
+MA_order <- seq(0,4)
+
+
+likelihood = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+AIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+BIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+
+for (p in AR_order) {
+  for (q in MA_order) {
+    model = arima(Monthly_gr_usindex$MR, order = c(p,0,q))
+    likelihood[p,q] = model$loglik # On recup la log vraissemblance
+    AIC[p,q] = model$aic # On recupère l'AIC
+    BIC[p,q] = BIC(model) # On recupère le BIC
+  }
+}
+AIC
+#on observe une AIC minimale pour (2,2) : -1319.245
+BIC
+#on observe une BIC minimale pour (2,2) : -1295.387
+```
+<blockquote> En se basant sur les informations obtenues, on conclut que l'ordre du modèle ARMA(2,2) le plus vraissemblable en fonction des deux critères que sont L'AIC et le BIC. </blockquote> 
+
+### 6. Estimation : Estimate the coefficients of the specification you selected in the previous question. To do so, use the package arima.sim. Calculate the yˆt and estimated residuals as well (ˆϵ).
+```{r}
+auto_arma22 <- arima(Monthly_gr_usindex$MR, order = c(2,0,2))
+
+MR <- Monthly_gr_usindex$MR
+residus <- auto_arma22$residuals
+estimated_MR <-(MR - residus) #y_estimée = y_observée - ϵ 
+
+head(estimated_MGR)
+```
+
+### 7. Plot the simulated and the dependent variables within the same chart. Check the significance of the estimated coefficients. What do you conclude ? Its it possible to affirm that the estimated specification is the most relevant model to infer the behavior of the inflation dynamics ?
+```{r}
+Comparison_MR_plot <- ggplot(Monthly_gr_usindex, aes(x = Monthly_gr_usindex$Date, y = Monthly_gr_usindex$MR, col = "Observed MR")) + geom_line() + geom_line(aes(y = estimated_MR, col = "Estimated MR")) + xlab("Date") + ylab("Mr") + ggtitle("Monthly returns Comparison Chart")
+Comparison_MR_plot
+```
+<blockquote> On constate que cette fois ci, le modèle estimé ne fit pas les données observées.</blockquote>
+
+### 8. Quality check : Explain the type of quality check we have to run to derive a robust conclusion regarding the estimated specification. Run the required quality checks seen during the class. Comment your results
+
+On commence par effectuer un test de Ljung-Box pour tester la dépendance du modèle : 
+```{r}
+Ljung_box2 <- Box.test(MR, lag = 20, type = "Ljung-Box")
+Ljung_box2
+```
+<blockquote> On constate que la p-value du test est supérieure à 0.05. On peut alors affirmer avec un niveau de confiance de 95% que le modèle n'est autocorrélé. </blockquote> 
+
+Par la suite : 
+
+On considère la RMSE pour estimer l'erreur quadratique moyenne du modèle pour tester la précision de ce dernier.
+
+```{r}
+Rmse <- RMSE(MR,estimated_MR) 
+Rmse # 0.04465826
+```
+<blockquote> On obtient une erreur quadratique moyenne 10 fois plus grande que pour le cas de figure précédent. Ce qui vient confirmer l'hy^pothèse selon laquelle le modèle n'est pas pertinent</blockquote>
+
+### 9. Forecasting : We want to forecast the Stockdata on a monthly basis, over the next three months. Use the required R function available in R to produce the values yt+1,yt+2 and yt+3.
+
+```{r}
+fc2 <- forecast(estimated_MR, level = c(95), h = 3)
+plot(fc2, xlim =c(390,399))
+```
+<blockquote> On observe cette fois-ci et ce en accord avec les resultats obtenus, que la prédiction semble bancale. En observant l'allure finale de la représentation graphique du US Index, la continuité avec les prédictions ne semble pas cohérente. </blockquote>
+
+En conclusion, on peut observer à travers ces deux études de cas que si une série temporelle est stationnaire, il est possible de la modéliser par un modèle ARMA(p,q) afin de faire des prévisions. En revanche, l'exercice 4 nous laisse supposer que même s'il est possible d'approcher une serie temporelle stationnaire pas un ARMA, l'estimation ne sera pas forcemment la plus précise. </blockquote>

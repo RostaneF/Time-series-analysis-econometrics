@@ -1,0 +1,522 @@
+---
+title: "TD1 - Econometrics"
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+
+## Partie 1 :  Prise en main des dates, ts object, charts, loops and functions
+
+####    a - Time series class object
+<blockquote>
+Génération de series temporelles en R : 
+<li>Une série temporelle peut être perçue comme une liste de nombres comprenant les temps auxquels ces nombres ont étés enregistrés. Dans cette première partie, on s'intéresse à l'information qui peut être stockée dans les objets de type "ts" (Times series) sur R.</li></blockquote>
+
+En pratique : un objet ts(vector, start=, end=, frequency=) convertit un "vecteur numérique" en objet "série numérique"" R. 
+<li>start/end : temps de la première et de la dernière observation.</li>
+<li>frequency : le nombre d'observations par unités de temps (1=annual, 4=quartly, 12=monthly, etc.).</li>
+
+```{r}
+tseries <- ts( rnorm (100) , start = c(2000 , 1) , frequency = 4)
+print ( tseries )
+#On obtient un affichage trimestriel. le vecteur Rnorm passé compte 100 valeurs. à frequence trimestrielle, celà correspond à 25 ans. Le résultat est cohérent.
+```
+
+Si l'on veut réduire la donnée à l'information comprise entre le premier trimèstre de l'an 2000 et le dernier de l'an 2012, on utilise la fonction window : 
+<li> 
+window(x, start = NULL, end = NULL, frequency = NULL) est une fonction générique qui extrait la une sous chaine d'un objet x entre la date start et la date end, elle peut être réarrangée différemment de l'objet de départ en choisissant une nouvelle frequence.</li>
+```{r}
+tseries_sub <- window ( tseries , start =c(2000 , 1) , end=c (2012 ,4))
+print ( tseries_sub)
+```
+####    b - Multiple time series
+
+On peut tracer plusieurs séries temporelles en les combinant dans une matrice. 
+```{r}
+  # Get the data points in form of a R vector .
+ts.1 <- c(799 ,1174.8 ,865.1 ,1334.6 ,635.4 ,918.5 ,685.5 ,998.6 ,784.2 ,985 ,882.8 ,1071)
+ts.2 <- c(655 ,1306.9 ,1323.4 ,1172.2 ,562.2 ,824 ,822.4 ,1265.5 ,799.6 ,1105.6 ,1106.7 ,1337.8)
+
+  # Convert them to a matrix .
+matrice <- matrix (c(ts.1 , ts.2) , nrow = 12)
+matrice
+# On indique le nombre de ligne que l'on veut et la répartition est faire pour respecter la dimension.
+
+  # Convert it to a time series object .
+rainfall.ts <- ts( matrice , start = c (2012 ,1) , frequency = 12)
+rainfall.ts
+
+
+```
+Et utilisation des fonctions d'union/d'intersection de séries temporelles
+
+```{r}
+ts1 <- ts(101:106 , freq =4 , start =2012.75)
+ts1
+#intesection : affiche les valeurs interséctées, à ou il y'a des NA, rien n'est affiché
+lag(ts1,-1)
+ts.intersect(ts1 , lag( ts1 , -1)) 
+#union : affiche tout
+ts.union(ts1,lag(ts1,-1))
+cbind ( ts1 , lag ( ts1 , -1))
+```
+#### c - Date class object
+
+Découverte des différentes options pour gérer les dates en R
+
+```{r}
+#Creation d'une date
+as.Date('1915-6-16')
+as.Date('1990/02/17')
+#les deux formats ci dessus sont reconnus par défaut.
+
+#On peut également choisir de préciser notre propre format : 
+as.Date('1/15/2001',format='%m/%d/%Y')
+as.Date('April 26 2001',format='%B %d %Y')
+period <- as.Date (c("2007-06-22", "2004-02-13"))
+  #On peut également calculer la durée entre deux dates:
+days <- period[1] - period[2]
+days #Durée entre les deux dates passées en paramètres.
+```
+#### d - Plotting Time series
+
+<blockquote> Il existe deux fonctions principales pour tracer des séries temporelles. (ts_ plot : plus simple, ggplot2 : plus riche).</blockquote> 
+#### Package TSstudio : starting with ts_plot
+
+```{r}
+#install.packages ("TSstudio")
+library ( TSstudio )
+data ( USgas )
+ts_info ( USgas )
+#Tracé
+ts_plot ( USgas ,
+           title = "US Monthly Natural Gas Consumption",
+           Xtitle = "Time",
+           Ytitle = "Billion Cubic Feet",
+           slider = TRUE)
+# slider permet d'ajouter un curseur en bas du tracé qui permettra de personnaliser la longueur de la fenêtre du tracé
+```
+
+````{r}
+data ("Coffee_Prices")
+#ts_info( Coffee_Prices )
+ts_plot ( Coffee_Prices , type = "multiple")
+```
+#### Package ggplot2: 
+```{r}
+# Libraries
+library ( ggplot2 )
+library ( dplyr )
+# Generating data within an uniform distribution
+data <- data.frame (
+  day = as.Date ("2017-06-14") - 0:364 ,
+  value = runif (365) + seq ( -140 , 224)^2 / 10000)
+
+# Most basic bubble plot
+p <- ggplot(data , aes ( x = day , y = value )) + geom_line () +  xlab ("")
+p + scale_x_date ( date_labels = "%b")
+
+#Autres exemples de personnalisation : 
+#p + scale_x_date ( date_labels = "%Y␣%b␣%d")
+#p + scale_x_date ( date_labels = "%W")
+#p + scale_x_date ( date_labels = "%m -%Y")
+
+# Libraries
+library (ggplot2)
+library (dplyr)
+library (hrbrthemes)
+# Dummy data
+data <- data.frame (
+  day = as.Date ("2017-06-14") - 0:364 ,
+  value = runif (365) + seq ( -140 , 224)^2 / 10000)
+# Most basic bubble plot
+p <- ggplot (data , aes ( x = day , y = value )) +
+  geom_line ( color ="steelblue") +
+  geom_point () +
+  xlab ("") +
+  theme ( axis.text.x = element_text ( angle =60 , hjust =1)) +
+  scale_x_date ( limit =c(as.Date ("2017-01-01") ,as.Date ("2017-02-11" ))) +
+  ylim (0 ,1.5)
+p
+```
+#### e - Loops and conditional expressions : Boucles F and FOR sur R 
+
+```{r, results= "hide"}
+a=0
+if(a!= 0){print (1/a)
+}else{ 
+print("No reciprocal for 0.")}
+
+for ( i in 1: 4){
+  print(log( i ))}
+for ( i in c( -8 , 9 , 11 , 45)){
+  print ( i^2)}
+
+fruits <- list ("apple", "banana", "cherry")
+for ( x in fruits ) {
+  if ( x == "cherry") {
+    break}
+  print ( x )}
+
+for ( i in 1:3){
+  for ( j in 1: i ){
+    print ( i + j )}}
+```
+* Application
+```{r, results= "hide"}
+mt = 5
+nt =5
+cter =0
+mym = matrix (0 , mt , nt )
+for ( i in 0: mt ){
+  for ( j in 0: nt ){
+    if( i == j ){
+      break ;}else {
+      mym [i , j ] = i*j
+      cter = cter +1}}
+  print ( i*j )}
+print ( cter )
+
+#### f - Next and Break Statement
+x <- 1:5
+for ( i in x ){
+  if ( i == 3){
+    break}
+  print ( i )}
+
+x <- 1:5
+for ( i in x ){
+  if ( i == 2){
+    next}
+  print ( i )}
+
+```
+# Partie 2 - Exercices
+
+<blockquote>La partie qui suit consistera
+<li>Dans un premier temps: à modéliser le comportement d'un bruit blanc gaussien ainsi que l'allure de son graphique d'autocorrélation.</li>
+<li>Dans un second temps, à étudier le comportement d'une marche aléatoire (somme de bruits blancs gaussiens). </li>
+<li>Enfin, à appliquer aux deux modèles le test de Ljung-box pour determiner de la manière la plus quantitative possible l'existence ou non d'autocorrélation.</li> </blockquote>
+
+## Exercice 1 - Etude d'un bruit blanc
+
+### 1 - a - Studying a Gaussian White Noise
+
+<li>Generate 1000 observations from a normal distribution with 0 mean and a standard deviation of
+1.7. This process is named (ut).</li>
+<li>Using a function plot, plot the generated series.</li>
+<li>Explain what is an autocorrelation function. Plot the ACF of (ut). How do you interpret the ACF
+results ? Are they aligned with the definition of the white noise.</li>
+
+```{r}
+library(ggplot2)
+ut <- rnorm(1000,0,1.7) #1000 observations d'une distribution normale de moyenne nulle et d'écart type 1.7
+dataf <- data.frame(x = 1:1000,y = ut)
+ggplot(dataf, aes(x = dataf$x, y = dataf$y, fill ="legend")) + geom_line(color = "steelblue") + xlab("Index") + ylab("ut") + ggtitle("White Noise ut")
+```
+<blockquote>L'autocorrélation (ou l'autocovariance) d'une série fait référence au fait que dans une série temporelle ou spatiale, la mesure d'un phénomène à un instant t peut être corrélée aux mesures précédentes (au temps t−1, t−2, t−3, etc.) ou aux mesures suivantes (à t+1, t+2, t+3, ...). Une série autocorrélée est ainsi corrélée à elle-même, avec un décalage (lag) donné.
+
+<li> acf : The function acf computes (and by default plots) estimates of the autocovariance or autocorrelation function. Function pacf is the function used for the partial autocorrelations. Function ccf computes the cross-correlation or cross-covariance of two univariate series.</li>
+<li>plot.acf : Plot method for objects of class "acf".</li>
+</blockquote>
+
+```{r}
+Autocorrelation <- acf(ut, lag = 5)
+```
+<blockquote>On remarque uniquement la présence d'un pic en 0 (qui corréspond au temps t) alors que toutes les autres autocorrélations sont significativement nulles (statistiquement) à partir de t-1. On peut ainsi dire que le procéssus n'est pas autocorrélé du tout. De plus, le resultat observé s'aligne avec la définition du bruit blanc gaussian qui est un "processus sans mémoire".
+</blockquote>
+
+### 1 - b - Studying a random walk 
+
+<li>
+1. Generate a random walk based on the simulated white noise (keep the same seed).
+
+2. Convert the simulated data into a ts object (choose the the start date and freq). Plot the generated
+series. Plot its density. What do you observe ?
+
+3. Plot the ACF of (wnt). How do you interpret this results ? Can the models seen during the class
+be used for this type of data ? Why ?
+
+4. Run the Ljung Box test for the processes given in the exercise 1-a and 1-b and for a different lags
+(a for loop could be usefull). Plot the values of the Q(m) and conclude
+
+<blockquote>
+Une marche aléatoire est une somme de bruits blancs gaussiens. On a déjà définit précedemment le bruit blanc gaussien "ut"
+<li> cumsum() Returns a vector whose elements are the cumulative sums, products, minima or maxima of the elements of the argument.</li>
+En pratique, cumsum(ut) renvoie la somme de toutes les valeurs de ut (ie : ut + ut-1 ... ut-k).
+</blockquote>
+
+```{r}
+#1.
+yt <- cumsum(ut)
+
+#2.
+yt.ts <- ts(yt, start = c(2000,1), frequency = 12)
+plot(yt.ts, type = "l", main = "Random Walk")
+plot(density(yt.ts))
+```
+
+<blockquote>On constate que la représentation graphique de la densité est celle d'une loi normale. Ce résultat est cohérent dans la mesure où la marche aléatoire générée est une somme de bruits blancs gaussiens. 
+De plus, la marché aléatoire générée s'apparente à un processus à moyenne mobile de paramètres tous égaux à 1.</blockquote>
+
+```{r}
+acf(yt.ts, lag = 20)
+```
+
+<blockquote> L'acf montre que le processus est entièrement autocorrélé. Avec les processus MA et AR, on ne peut pas déduire l'ordre d'un tel acf car toutes les autocorrélations sont statistiquement différentes de 0. </blockquote>
+
+#### Test de Ljung-Box
+<blockquote>
+Etant donnée que l'on travaille avec une série à moyenne constante, on peut appliquer le test de Ljung-Box pour établir la présence d'autocorrélation ou non dans le processus stochastique.
+
+<li> Box.test(x, lag = 1, type = c("Box-Pierce", "Ljung-Box"), fitdf = 0) : Compute the Box–Pierce or Ljung–Box test statistic for examining the null hypothesis of independence in a given time series. These are sometimes known as ‘portmanteau’ tests.</li>
+</blockquote>
+
+Test de Ljung-Box appliqué aux résultats des parties 1-a et 1-b :
+
+```{r}
+ut.test <- Box.test(ut,lag = 20, type =  "Ljung")
+yt.test <- Box.test(ut, lag = 20, type = "Ljung")
+```
+
+Test de Ljung-Box appliqué à ut pour des lags (de 1 à 30 car au delà on utilise la table de la loi normale)
+
+```{r}
+ut_TestStat = matrix(0,30) #On génère une matrice pour y stocker les différentes valeurs de Q(m)
+for (i in 1:30){
+  ut_BoxTest= Box.test(ut, lag = i, type = "Ljung")
+  ut_TestStat[i][1] = ut_BoxTest$statistic 
+}
+plot(ut_TestStat, type = "l", main = "Ljung-Box Test : Ut", xlab = "Lag", ylab = "Statistic X")
+```
+Test de Ljung-Box appliquéà yt pour des lags (de 1 à 30 car au delà on utilise la table de la loi normale)
+
+```{r}
+yt_TestStat = matrix(0,30) #On génère une matrice pour y stocker les différentes valeurs de Q(m)
+for (i in 1:30){
+  yt_BoxTest= Box.test(yt, lag = i, type = "Ljung")
+  yt_TestStat[i][1] = yt_BoxTest$statistic 
+}
+plot(yt_TestStat, type = "l", main = "Ljung-Box Test : yt", xlab = "Lag", ylab = "Statistic X")
+```
+
+## Exercice 2 :  Import, tracé et analyse de données.
+
+<blockquote>Questions :</blockquote>
+<li>1. Import the database contained in the cvs file using the read.csv function. This database is a
+collection of stock prices.</li>
+2. Plot the third and fifth columns of this dataframe using either the ts_plot or the ggplot2 framework.
+3. Plot the density of the selected stock daily returns ? Using a quantile plot, check the normality
+of the empirical distribution of the daily returns. Display the four charts within the same output
+window 6
+4. Calculate the autocovariance and the autocorrelation functions of the daily returns and calculate
+the Ljung-Box text for the various numbers of lags.
+5. Plot the same ACF of the daily squared returns and calculate the Ljung-Box text for the various
+numbers of lags.
+6. What are your conclusions regarding the stationary of the daily and squared daily returns
+
+#### 1 - Import des donnees
+```{r}
+data <- read.csv("data.csv", header = TRUE, sep = ",")
+#head(data,5)
+```
+#### 2 - Représentation graphique du cours des actions 3 et 5 ( LVMH & ROG )
+```{r}
+library(ggplot2)
+library (dplyr)
+library (hrbrthemes)
+library(reshape2)
+LVMH = data$F.LVMH
+ROG = data$S.ROG
+dates = as.Date(data$X, format = "%m/%d/%Y")
+
+ggplot(data, aes(x= dates)) + geom_line(aes(y = LVMH, col = "LVMH")) + geom_line(aes(y = ROG, col = "ROG")) + ylab("Stock Price") + ggtitle("StockPrice evolution : LVMH & ROG") + scale_color_manual(values = c('LVMH' = 'darkblue', 'ROG' = 'red')) + labs(color = 'Stock')
+```
+
+#### 3 - Calcul des rendements moyens et représentations graphiques 
+```{r}
+LVMH.Daily_returns <- matrix(0,length(LVMH))
+ROG.Daily_returns <- matrix(0,length(ROG))
+
+for (i in 2:length(LVMH)){
+  LVMH.Daily_returns[i] = (LVMH[i]-LVMH[i-1])/LVMH[i-1]
+}
+
+for (i in 2:length(ROG)){
+  ROG.Daily_returns[i] = (ROG[i]-ROG[i-1])/ROG[i-1]
+}
+ # On determine les densités des rendements : 
+p1 <- density(LVMH.Daily_returns)
+p2 <- density(ROG.Daily_returns)
+```
+
+<blockquote> qqnorm() : On appelle QQ-Plot normal le diagramme qui permet de comparer la distribution des données d’un lot à la distribution dite normale ou gaussienne. 
+<li> Dans le cas ci-desosus on compare les deux densités de rendements des actions LVMH & ROG à une densité de loi normale.</blockquote>
+
+- On obtient alors la représenation graphique suivante : 
+```{r}
+par(mfrow = c(2,2))
+plot(p1, main = "LVMH returns density", col = "blue")
+plot(p2, main = "ROG returns density", col = "green")
+qqnorm(LVMH.Daily_returns, ylab = "LVMH Returns quantiles", main = "Normal Q-Q Plot (LVMH)", col = "blue")
+qqnorm(ROG.Daily_returns,  ylab = "ROG Returns quantiles", main = "Normal Q-Q Plot (ROG)", col = "green")
+```
+
+<blockquote>On remarque dans un premier temps que les densités des deux actions sont celles de lois normales. Cette conjecture est confirmée par les QQ-plot. </blockquote>
+
+#### 4- Autocovariance et Ljung-Box pour différents lags : 
+On commence par représenter les ACF respectives des rendements journaliers des actions LVMH et ROG :
+```{r}
+par(mfrow = c(1,2))
+acf(LVMH.Daily_returns, lag = 5, main = "LVMH daily returns")
+acf(ROG.Daily_returns, lag = 5, main = "ROG daily returns")
+```
+<blockquote> On conjecture que les autocorrélations sont à première vue toutes significativement nulles dès le premier lag.</blockquote>
+
+Ensuite on applique le test de Ljung-Box pour des lags variants (1~30): 
+
+```{r}
+LB.LVMH_returns = matrix(0,30)
+LB.ROG_returns = matrix(0,30)
+
+for (i in 1:30){
+  #Evaluation du test de LB pour le lag i.
+  LB.boxLvmh = Box.test(LVMH.Daily_returns, lag = i, type = "Ljung")
+  LB.boxROG = Box.test (ROG.Daily_returns, lag = i, type = "Ljung")
+  
+  #Attribution des quantiles : 
+  LB.LVMH_returns[i] = LB.boxLvmh$statistic
+  LB.ROG_returns[i] = LB.boxROG$statistic
+}
+```
+
+
+Enfin, on obtient les représentations graphiques suivantes : 
+
+```{r}
+df <- data.frame( x = 1:30, y = LB.LVMH_returns, y2 = LB.ROG_returns)
+ggplot(df, aes(x = df$x)) + geom_line(aes(y = df$y,col = "LVMH_statistics")) + geom_line(aes(y= df$y2, col = "ROG_statistics")) + xlab("Lag") + ylab("Statistic X") + ggtitle("Ljung-Box Test ") + scale_color_manual(values = c('LVMH_statistics' = 'darkgreen', 'ROG_statistics' = 'blue')) + labs(color = "Statistics")
+```
+
+
+#### 5- Etudes des rendments quadratiques journaliers : 
+
+```{r}
+LVMH.dr.squared = LVMH.Daily_returns^2
+acf(LVMH.dr.squared, lag = 10, main = "ACF Quadratic Returns (LVMH)")
+
+
+ROG.dr.squared = ROG.Daily_returns^2
+acf(ROG.dr.squared, lag = 10, main = "ACF Quadratic Returns (ROG)")
+
+```
+
+On peut alors représenter la variation des statistiques relativement à la varaition du lag pour un test de Ljung-Box : 
+```{r}
+LB.LVMH_squared_returns = matrix(0,30)
+LB.ROG_squared_returns = matrix(0,30)
+
+for (i in 1:30){
+  #Evaluation du test de LB pour le lag i.
+  LB.boxLvmh = Box.test(LVMH.dr.squared, lag = i, type = "Ljung")
+  LB.boxROG = Box.test (ROG.dr.squared, lag = i, type = "Ljung")
+  
+  #Attribution des quantiles : 
+  LB.LVMH_squared_returns[i] = LB.boxLvmh$statistic
+  LB.ROG_squared_returns[i] = LB.boxROG$statistic
+}
+
+df <- data.frame( x = 1:30, y = LB.LVMH_squared_returns, y2 = LB.ROG_squared_returns)
+
+ggplot(df, aes(x = df$x)) + geom_line(aes(y = df$y,col = "LVMH_statistics")) + geom_line(aes(y= df$y2, col = "ROG_statistics")) + xlab("Lag") + ylab("Statistic X") + ggtitle("Ljung-Box Test \n(squared returns) ") + scale_color_manual(values = c('LVMH_statistics' = 'darkgreen', 'ROG_statistics' = 'blue')) + labs(color = "Statistics")
+```
+
+# Exercice 3 : EMV 
+
+## 1- The likelihood of a sample generated by a exponential distribution
+Dans un premier temps, on définit la vraissemblance pour un sample généré par une loi exponentielle. On suppose les variables aléatoires indépendantes et identiquement distribuées.
+
+```{r}
+#On implémente la fonction à densité exponentielle
+
+densite_expo <- function(x,theta){
+  result = theta*exp(-theta*x)
+  result
+}
+
+# On implémente la fonction de vraissemblance
+likelyhood <- function(sample,theta){
+  returned = 1
+  for (x in sample){
+    returned = returned*densite_expo(x,theta)
+  }
+  returned
+  }
+```
+
+### 2- the parameter θ :  
+
+<blockquote> le calcul de la vraissemblance pour un echantillon de variables aléatoires indépendantes aboutit à une logvraissemblance :"n*log(θ) - θ*Somme(xi)"  . Donc la dérivée de la logvraissemblance est  : "n/θ - Somme(xi). Or on cherche la valeur de théta la plus vraissemblance donc cette dernière corréspond à un extremum de la vraissemblance (ou log(vraissemblance)). On obtient ainsi par simple résolution que l'estimation de " </blockquote>
+
+```{r}
+# Or, théta est le paramètre inconnu que l'on doit estimer, on procède alors de la sorte :
+  
+Estimation_expo <- function(sample){
+  xn = sum(sample)/length(sample) #estimateur de la moyenne empirique
+  theta = 1/xn
+  theta
+}
+
+```
+
+## 2- Answer to the same questions considering this time a sample generated by a Gaussian distribution.
+
+### Density/likelyhood : 
+
+```{r}
+#densité : 
+densite_gauss <- function(x, nu, sigma){
+  densite = (sqrt(2*pi)*sigma)^-1 * exp((1/2)* ((x-nu)/sigma)^2)
+}
+
+#Vraissemblance :
+
+likelyhood_gauss <- function(sample, nu, sigma){
+  result = 1
+  for (x in sample){
+    result = result * densite_gauss(x,nu,sigma)
+  }
+  result
+}
+
+``` 
+
+<blockquote> Par la suite, la recherche d'extremums pour les deux paramètres aboutit à :
+<li> nu : somme(xi)/n </li>
+<li> sigma : somme((xi-nu)^2)/n</li>
+</blockquote>
+
+
+On obtient alors : 
+
+```{r}
+nu_sigma <- function(sample){
+  if (length(sample) != 0){
+    xn = sum(sample)/length(sample)
+    sig = 0
+    for (x in sample){
+      sig = sig + ((x-xn)^2)/length(sample)
+    }
+  }
+  nu = xn
+  sigma = sig
+  list(nu,sigma)
+}
+
+``` 
+
+

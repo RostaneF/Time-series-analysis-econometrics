@@ -1,0 +1,198 @@
+---
+title: "TP2 - Econometrics"
+name: "FEKNOUS Rostane"
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+```
+
+
+# Exercise 1 - Simulated data
+
+## 1. Compute 2 random walks with a drift and store them within a matrix.
+Il existe deux façons de procéder. 
+
+On doit tout d'abord générer une marche aléatoire comme somme de bruits blancs gaussiens. On choisit de ce fait arbitrairement les paramètres pour obtenir quelque chose qui nous convient. 
+```{r}
+set.seed(123)
+yt1 <- cumsum(rnorm(1:1000,0,1))
+plot(yt1,type ="l", main = "Marche aléatoire ")
+```
+
+On ajoute par la suite une trend : un paramètre qui dépend du temps. On choisit arbitrairement le coefficient associé, cependant ce dernier ne doit pas être trop élevé au risque de se rapprocher trop d'un modèle linéarire (une droite). 
+
+On peut également créée une marche aléatoire comme un bruit blanc + une composante dépendant du temps.
+
+```{r}
+t = 1:1000
+yt = yt1 + 0.15*t
+yd = rnorm(1:1000) + 0.07*t
+plot(yt, type = "l", col = "red", main = "Marche aléaoire avec une trend")
+lines(yd, col = "blue")
+lines(yt1)
+```
+
+le modèle à appliquer pour transformer le processus en processus stationnaire est le modèle linéaire. Ce processus est donc deterministe. 
+
+## 3. Select one of the generated random walk and compute a linear regression where the explanatory variable is a trend t. Calculate and plot the detrended variable
+
+On opère sur les deux processus : 
+
+### Tout d'abord pour yt = Marche aléatoire + compostante en temps
+
+```{r}
+data <- data.frame(yt = yt, t= t)
+fit_model1 <- lm(yt~t, data)
+summary(fit_model1)
+```
+Pour vérifier si le modèle linéaire est pertinent, on prête attention au comportement des résidus.
+
+```{r}
+acf(fit_model1$residuals)
+```
+
+On constate que les résidus sont fortement autocorrélés. On applique alors un filtre en différence.
+
+```{r}
+delta_yt <- diff(yt)
+acf(delta_yt)
+```
+On constate cette fois ci l'abscence d'autocorrélation des résidus. Ainsi on conclut que la trend est de nature stochastique. 
+
+### Pour yd = Bruit blanc + Composante en temps
+
+```{r}
+data <- data.frame(yd = yd, t= t)
+fit_model2 <- lm(yd~t, data)
+acf(fit_model2$residuals)
+```
+On constate cette fois ci que le filtre linaire suffit à supprimer la trend. Les résidus n'étant pas autocorrélés, la trend est de nature déterministe. 
+
+# Exercise 2 - Trend and seasonal factor with true data : 
+
+## Step 1 : Trend and seasonal factor : 
+
+### 1. Load the csv file and import the three time series. Check their status ? Convert them into a time series and generate a date series as well.
+
+```{r}
+data <- read.csv("transportation_index.csv", header = TRUE, sep = ";")
+dates <- as.Date(data$X, format = "%d/%m/%Y")
+data$X <- dates
+head(data)
+```
+
+### 2. Plot the three indicators within the same charts with dates in the x-axis (there are two possibilities).
+
+```{r, warning=FALSE}
+p1 <- ggplot(data, aes(x = data$X, y = data$USTRASERV, col = "Indicateur USTRASERV ")) + geom_line()+ geom_line(aes(y = data$USTRAFREI, col = "Indicateur USTRASERI")) + geom_line(aes(y = data$USTRAPASS, col = "Indicateur USTRPASS" ))+ ggtitle("USTRASERV") + xlab("date") + ylab("Indicateur")
+p1
+```
+### 3. Remind the definition of the autocorrelation function and the partial autocorrelation function.
+
+La fonction d'autocorrélation considère l'autocorrélation globale des résidus. La PACF tient compte de l'autocorrélation des résidus entre eux.
+
+### 4. Plot the ACF function of the passenger index data. What are your conclusions ?
+
+```{r}
+acf(data$USTRASERV)
+acf(data$USTRAFREI)
+acf(data$USTRAPASS)
+```
+
+### 5. Enumerate the existing tests of autocorrelations ? Perform the Ljung-Box test. Remind the difference between the Ljung-Box test and the Box-Pierce one ? Is your time series ready to be modeled ?
+
+Les tests d'autocorrélation : Durbin Watson, Box-Pierce, Ljung-box
+Les tests visuels : ACF / PACF
+
+Différence entre Ljung-Box et Box-pierce est qu'on préfère Ljung-Box pour les petits samples. 
+
+```{r}
+Box.test(data$USTRASERV, type = "Ljung-Box")
+Box.test(data$USTRAFREI, type = "Ljung-Box")
+Box.test(data$USTRAPASS, type = "Ljung-Box")
+```
+On constate alors que les p-values pour les trois tests sont inférieures à 0.05 donc l'autocorrélation est statistiquement significative pour les trois indicateurs.
+
+## Step 2 : Seasonal data : what does it look like ?
+
+### 1. By using the function "scan", import both the data of births and sales from the following links
+
+```{r}
+birth_data <- scan("http://robjhyndman.com/tsdldata/data/nybirths.dat")
+sales_data <- scan("http://robjhyndman.com/tsdldata/data/fancy.dat")
+```
+```{r}
+birth.ts <- ts(birth_data, frequency = 12, start = c(1946,1))
+sales.ts <- ts(sales_data, frequency = 12, start = c(1946,1))
+```
+
+
+### 2. Plot the two series in two separated charts.
+
+```{r}
+plot(birth.ts, type = "l", col = "blue",main= "Birth Series")
+plot(sales.ts, col = "red", main = "Sales Series")
+```
+### 3. Based on the charts observation, select the appropriate model to treat the seasonality in each case 1.What kind of transformation can we introduce to move from an multiplicative seasonal scheme to an additive one ?
+
+On introduit une transformation logarithmique pour transformer le schéma multiplicatif en schema additif. 
+
+```{r}
+logsales.ts = log(sales.ts)
+plot(logsales.ts, col = "blue", main = "Sales Series")
+```
+On constate que les amplitudes des pics sont globalement constantes.
+
+### 4. Plot the ACF function of the birth and the sales data using a lag of 36 months. What are your conclusions ? Is there a difference between the ACF function generated for transportation indices ?
+
+```{r}
+acf(birth.ts, lag = 36)
+acf(logsales.ts, lag = 36)
+```
+
+# Exercise 3 : Regression analysis
+
+## 1. Find a simple way to construct the required number of seasonal dummies
+
+On a besoin de 12 dummies. 
+
+```{r}
+for (i in 1:12){
+  d <- rep(0,times = 12)
+  d[i] = 1
+  s = rep(d,times = 7)
+  assign(paste("s",i,sep=""),s)
+}
+s_d <- cbind(s1,s2,s3,s3,s5,s6,s7,s8,s9,s10,s11,s12)
+
+```
+
+## 2. Use these dummies within a linear model and estimate this latter (pay attention to the number of regressors). Comment your results
+
+On travaille sur les ventes : 
+
+```{r}
+data <- data.frame(logsales.ts,s_d)
+head(data)
+```
+
+on construit un modèle linéaire dont les variables explicatives sont les dummies : 
+
+```{r, warning = FALSE}
+lmodel <- lm(logsales.ts~.-s5, data)
+plot(lmodel$residuals, type = "l", col = "blue", main = "Residus estimés")
+```
+On constate que les pics de saisonnalité ont été retirés mais il subsiste tout de même une trend. 
+
+```{r}
+
+```
+

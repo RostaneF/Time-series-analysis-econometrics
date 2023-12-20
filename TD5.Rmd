@@ -1,0 +1,534 @@
+---
+title: "TP Noté"
+subtitle: "Econometrie"
+author: SALI Nesrine
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+date: "2022-12-07"
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE, error = TRUE)
+library (tidyquant )
+library(quantmod);
+library(tseries);
+library(timeSeries);
+library(xts);
+library(tidyverse)
+library(lubridate)
+library(gridExtra)
+library("doParallel")
+library(sarima)
+library(dplyr)
+library(zoo)
+library(ggplot2)
+library(tseries)
+library(urca)
+library(stats)
+library(forecast)
+
+```
+
+# Exercise 1
+
+## Question 1 Import data
+
+Data importation can be automated using R features and packages. There exists several API facilitating economic and financial import and update. Load the Advance Retail Sales - namely the Retail Trade from the Federal Reserve of Saint Louis 1
+
+```{r import data}
+data <- read_delim("RSXFSN.csv",delim = ";",show_col_types = FALSE)
+names(data)[names(data) == "RSXFSN"] <- 'Retail'
+data$Retail=data$Retail/1000
+data$observation_date <- as.Date(data$observation_date,format="%m/%d/%Y")
+head(data)
+
+```
+
+## Question 2. Plots -Saisonnality
+
+Check the status of the imported data and transform it into a right object if necessary. Plot the data. What do you observe ? What type of seasonal pattern is ? What type of the filters do you propose to clean the retail sales.
+
+Answer : Season pattern : 1Y. To clean data I propose to make moving average by hear
+
+```{r, echo=FALSE}
+ggp <- ggplot(data, aes(observation_date, Retail)) +                   # ggplot2 plot with default axis limits
+  geom_line()
+ggp
+```
+
+## Question 3. Run the required filter
+
+Run the required filter to cut the seasonal pattern ? You can choose between the seasonal regression, the moving average filter and the decompose function (this function is based on moving average seasonal filters as well).
+
+```{r, echo=FALSE, warning=FALSE}
+salesseries<-ts(data$Retail, frequency=12)
+dstl <- stl(salesseries, s.window="periodic")
+data$Retail_sa <- seasadj(dstl)  # de-seasonalize
+
+p1 <- data %>% ggplot(aes(x = observation_date, y = Retail)) + geom_line() + geom_smooth() + ylab("Retail sales (billon dollars)") + ylim(c(100,550)) + ggtitle("Raw retail sales") + theme_bw() 
+p2 <- data %>% ggplot(aes(x = observation_date,y = Retail_sa))+ geom_line() + geom_smooth()+ ylab("Retail sales (billon dollars)") + ylim(c(100,550)) + ggtitle("Seasonally adjusted retail sales ") + theme_bw()
+grid.arrange(p1, p2, ncol = 2)
+
+```
+
+## Question 4. Plots -Saisonnality
+
+Grab the filtered data and check using the right tool the seasonal pattern has been deleted. Is this filtered data be modeled using an ARMA(p,q) approach ? Yes, The importance of seasonality is quite evident and ARIMA fails to encapsulate that information implicitly
+
+# Exercise 2 : Unit Root tests
+
+## Question 1
+
+Load the "urca" package. Summarize quickly the step-wise approach of the Dickey Fuller test. Compute the Augmented Dickey Fuller test using the right function on the filtered data (note that the selection of the number of lags can be performed on a discretionary way or automatically)
+
+```{r, echo=FALSE}
+urtest = ur.df(data$Retail_sa, type="none", lags = 1)
+summary(urtest)
+
+```
+## Question 2
+
+Determine then the integration degree of the data 
+
+```{r}
+urtest = ur.df(diff(data$Retail_sa), type="none", lags = 1)
+summary(urtest)
+```
+We obtain results allowing us to conclude :
+
+ - the p-value is almost zero, so we can state with quasi-certainty that as p-value < 0.05 we reject the hypothesis of non-stationarity of the differentiated time series. 
+- As the coefficient of tt has a t-value < 2.78. We conclude that the trend is no longer significant for the differentiated series. 
+We can conclude from this first test that the integration degree is 1. 
+
+## Question 3 
+
+```{r, echo=FALSE}
+pp <- ur.pp(data$Retail_sa, type="Z-tau", model="trend", lags="short")
+summary(pp)
+
+```
+The PP test confirms the hypothesis on the integration degree obtained in the previous question.
+
+## Question 3
+
+Compute the Phillips and Perron test on the filtered data. Does it confirm your previous result ?. Compute the KPSS test using one of the artificial data generated previously. Do we find the same conclusion ?
+
+This test confirm the previous result.
+
+```{r}
+kpss.test(data$Retail_sa, null="Trend")
+
+```
+The test statistic is again above the critical value at 1%. The result is therefore the same as before. We reject the hypothesis of stationarity of the TS.
+
+## Question 4
+
+Find the degree of integration of the US retail sales using the KPSS test. Does it validates the previous result ? The degree of integration is same as previous
+
+```{r}
+kpss.test(diff(data$Retail_sa), null="Trend")
+
+```
+
+We then observe that the test statistic is lower than the critical value at 1%. The hypothesis of stationarity of the statistical test is therefore not rejected. The degree of integration is therefore 1.
+
+
+# Exercice 3 Modeling
+
+## 1. Given the results derived from the previous sections, propose the most relevant ARMA(p,q) framework to model the retail sales dynamics. Is there an alternative to the ARMA(p,d) approach ?
+
+Given the results derived from the previous sections, propose the most relevant ARMA(p,q) framework to model the retail sales dynamics. Is there an alternative to the ARMA(p,d) approach ? 
+
+```{r}
+stationnary_TS <- diff(data$Retail_sa)
+
+AR_order <- seq(0,4)
+MA_order <- seq(0,4)
+
+
+likelihood = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+AIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+BIC = matrix(0,nrow = max(AR_order),ncol = max(MA_order))
+
+for (p in AR_order) {
+  for (q in MA_order) {
+    model = arima(stationnary_TS, order = c(p,0,q))
+    likelihood[p,q] = model$loglik
+    AIC[p,q] = model$aic 
+    BIC[p,q] = BIC(model) 
+  }
+}
+AIC
+BIC
+```
+We observe through the study of AIC and BIC that the most relevant parameters for ARMA are p=q=4. 
+
+```{r}
+auto_arma43 <- arima(stationnary_TS, order = c(4,0,4))
+residus <- auto_arma43$residuals
+estimated <-(stationnary_TS - residus)
+plot(stationnary_TS)
+lines(estimated, col = "blue")
+```
+It can be seen that the model generated with the parameters obtained fits the stationary retail relatively well. Nevertheless the result can be much more accurate. We will see the reason for this through the ARIMA modeling.
+
+```{r}
+auto_arma44 <- arima(data$Retail_sa, order = c(4,1,4))
+residus2 <- auto_arma44$residuals
+estimated <- (data$Retail_sa - residus)
+plot(data$Retail_sa, col = "black")
+lines(estimated, col = "blue")
+```
+We see that the approximation is much more relevant. This result is coherent because the integrated data approach by an ARMA is obviously not as relevant as the ARIMA approach.
+
+## 2. Having choose the correct specification, justify the relevance of your choice with the required tests.
+
+First, we perform tests on the residuals:
+
+```{r}
+acf(residus, lag = 120)
+```
+
+We first observe that the residuals are almost not autocorrelated. This confirms with a first method the relevance of our results.
+
+```{r}
+adf_test <- ur.df(estimated, type = "trend",7, selectlags = "AIC")
+summary(adf_test)
+```
+
+We observe that the values of the test statistic are all lower than the critical values. Therefore, we conclude by hypothesis confirmation that the generated series is indeed stationary.
+
+# Exercice 4
+
+```{r, echo=FALSE}
+
+jnj = tq_get("JNJ", get=" stock.prices ", from ="1997-01-01 ") %>% 
+tq_transmute(mutate_fun = to.period , period ="months")
+head(jnj)
+
+```
+
+## Question 1
+
+Degree of integration
+
+```{r, echo=FALSE}
+kpss.test(jnj$adjusted, null="Trend")
+```
+
+## Question 2
+
+Determine the order of the ARIMA model
+
+```{r,echo=FALSE}
+stock_prices <- ts(jnj$close, start = c(1997,1), frequency = 12)
+stationnary_prices <- diff(stock_prices)
+
+armaloop=function(ts){
+  aics=0
+  k=1
+  for (p in 0:4){
+    for (q in 0:4){
+      arma=arima(ts,order=c(p,0,q)) 
+      aics[k]=AIC(arma)
+      k=k+1
+    }
+  }
+  names(aics)=c("(0,0)","(0,1)","(0,2)","(0,3)","(0,4)","(1,0)","(1,1)","(1,2)","(1,3)","(1,4)","(2,0)","(2,1)","(2,2)","(2,3)","(2,4)","(3,0)","(3,1)","(3,2)","(3,3)","(3,4)","(4,0)","(4,1)","(4,2)","(4,3)","(4,4)")
+  return(aics)
+}
+armaloop(stationnary_prices)
+min(armaloop(stationnary_prices))
+```
+We obtain this time that the optimal parameters for the model to be generated are p = 0 and q = 2.
+
+## Question 3
+Estimate the corresponding ARIMA(p,d,q) model to the values of p,d,q selected previously. Check the estimated coefficients and compute the fit of the model. Plot (within the same chart) the estimated values of the stock price and the observed one.
+```{r}
+auto_arma1 <- arima(stock_prices, order = c(0,1,2))
+residus <- auto_arma1$residuals
+estimated <-(stock_prices - residus)
+plot(stock_prices, col = "black")
+lines(estimated, col = "green")
+```
+
+## Question 4
+
+
+
+```{r}
+residus <- stock_prices - estimated
+RMSE <- function(observed,predicted)
+{
+  rmse <- sqrt(mean((observed-predicted)^2))
+  rmse
+}
+Rmse <- RMSE(stock_prices,estimated) 
+Rmse
+```
+
+## Question 5
+
+```{r}
+stock = diff(log(jnj$adjusted))
+stock = stock[!is.na(stock)]
+n= length(stock)
+date_order = jnj$adjusted[1:n]
+breakpoint = floor(n*2.9/3)
+# Apply the ACF and PACF functions
+par(mfrow = c(1,1))
+acf.stock = acf(stock[1:breakpoint], main='ACF Plot', lag.max=100)
+pacf.stock = pacf(stock[1:breakpoint], main='PACF Plot', lag.max=100)
+length(date_order)
+
+####################################
+
+# Initialzing an xts object for Actual log returns
+Actual_series = xts(0,as.Date("2022-12-05","%Y-%m-%d"))
+# Initialzing a dataframe for the forecasted return series
+forecasted_series = data.frame(Forecasted = numeric())
+b= breakpoint
+stock_train = stock[1:b]
+# Summary of the ARIMA model using the determined (p,d,q) parameters
+fit = arima(stock_train, order = c(2, 0, 2),include.mean=FALSE)
+summary(fit)
+# plotting a acf plot of the residuals
+acf(fit$residuals,main="Residuals plot")
+
+########################################
+
+# Forecasting the log returns
+arima.forecast = forecast(fit, h = 3,level=99)
+summary(arima.forecast)
+# plotting the forecast
+par(mfrow=c(1,1))
+plot(arima.forecast, main = "ARIMA Forecast")
+
+```
+
+# Exercice 5
+
+In this exercise, we propose to introduce a new unit root test : the test of Zivot and Andrews (1992). On of the weakness of the ADF unit root tests is their potential confusion of structural breaks in the series as evidence of non-stationarity. In other words, they may fail to reject the unit root hypothesis if the series have a structural break.
+
+Zivot and Andrews (1992) endogenous structural break test is a sequential test which utilizes the full sample and uses a different dummy variable for each possible break date. The break date is selected where the t-statistic from the ADF test of unit root is at a minimum (most negative). Consequently a break date will be chosen where the evidence is least favorable for the unit root null.
+
+The Zivot-Andrews (1992) tests state the null hypothesis is that the series has a unit root with structural break(s) against the alternative hypothesis that they are stationary with break(s). We reject Null if t-value statistic is lower than tabulated critical value.
+
+## Question 1
+
+This test analyzes whether the model has a unit root and breaks Hypothesis H0: the series has a unit root with break(s) Hypothesis H1: the series is stationary with break(s) We reject the null hypothesis if the t-statistic is \< the critical value
+
+## Question 2
+
+Generate 3 new random walks.
+
+First is a pure random walk :
+
+```{r}
+x<-W<-v<-rnorm(700)
+for(t in 2:700)
+  {x[t]<-x[t-1]+W[t]}
+plot.ts(x)
+```
+
+Random walk with a break in trend:
+
+```{r}
+a=rnorm(100)
+b=rnorm(100)
+R1<-c((20+a),b)
+plot.ts(R1)
+```
+
+Random walk with a break in level and trend:
+
+```{r}
+R2<-c((20+x),b)
+plot.ts(R2)
+```
+
+## Question 3
+
+Compute the appropriate Zivot and Andrews (1992) test for the generated random walk. Summarize your output within a table.
+
+```{r}
+TestZivot1=ur.za(x)
+TestZivot1
+TestZivotTrend=ur.za(R1)
+TestZivotTrend
+
+TestZivotBreak=ur.za(R2)
+TestZivotBreak
+```
+
+## Question 4
+
+Is it relevant to use such test for the filtered retail sales. Justify. Compute the Zivot and Andrews (1992) unit root test using the US retail sales.
+
+# Exercise 6
+
+The goal of this study is to perform a time-series analysis of the US GPB. we will apply basic time-series models(such as basic ARMA model) and techniques(such as detrend) to the data. Then, we will check stationarity of monthly sentiment series by either root test or Dickey-Fuller test even we haven't covered yet. If our data indicates some trend effects, we should do ARIMA model to deal with the non-stationarity problem, at least we can try to solve it. Now, we could do model-selecting by AIC table and model-checking plots to assess different fitted models of the differenced series. Finally,we will further assess whether monthly consumer sentiment exhibits certain cyclical or periodic behavior so that we could add SARIMA model to adjust our seasonality change. The average length of the stochastic cycles will be obtained and hence, we could validate the model by comparing the predicted values to the actuals.
+
+## Exercise 6.1.Data Analysis
+
+```{r, results='hide',message=FALSE,echo=FALSE}
+library("faraway")
+library(alr4)
+library(quantreg)
+library(MASS)
+library(nlme)
+library(fUnitRoots)
+library(forecast)
+```
+
+```{r, results='hide',message=FALSE,echo=FALSE}
+midtermda<-read.table("usgbp.txt",header=T)
+head(midtermda)
+csent<-midtermda$VALUE
+```
+
+```{r}
+#Detrend series 
+chg<-diff(csent)
+schg<-diff(chg, 4)
+summary(csent)
+summary(schg)
+```
+
+Some descriptive statistics
+
+Then we look at the histogram as well as the ts plots.
+
+```{r, results='hide',message=FALSE,echo=FALSE}
+par(mfcol=c(1,2))
+hist(csent)
+hist(schg)
+tdx<-midtermda[,1]+midtermda[,2]/12
+#times series plot
+par(mfcol=c(3,1))
+plot(tdx,csent,xlab='year',ylab='sentiment',type='l',main="UM Consumer Sentiment")
+plot(chg,ylab='monthly detrend sentiment',type='l',main="Monthly Detrend UM Consumer Sentiment")
+plot(schg,ylab='seasonally monthly detrend sentiment',type='l',main="Seasonally Monthly Detrend UM Consumer Sentiment")
+
+```
+
+## Exercise 6.2 Check Stationarity
+
+```{r, results='hide',message=FALSE,echo=FALSE}
+par(mfcol=c(1,1))
+acf(csent,main="Sample ACF of US GBP")
+
+```
+
+## Exercise 6.3 Augumented Dickey Fuller test
+
+```{r,warning=FALSE}
+adfTest(csent,type="nc")
+adfTest(chg,type="nc")
+```
+
+In Econometrics, we usually use Augumented Dickey Fuller to test if we could reject the null hypothesis that a unit root is present in an autoregressive model, indicates a non-stationarity. From the result on testing the original data $\textit{csent}$, the p-value is very high and we fail to reject the NH and conclude that there is a unit root in the monthly sentiment series, implies the model in this data is not stationary. However, the result on the transformed data $\textit{chg}$ gives us enough evidence to reject the NH and it suggests us differenced data is more suitable in our model. The result confirms the Sample ACF plots in 3.2.
+
+## Exercise 6.4 Select the ARIMA model.
+
+ARIMA(p,1,q) Model: $\phi(B)((1-B)Y_{n}-\mu)=\psi(B)\epsilon_{n}$, where $\epsilon_{n}$ follows a Guassian distribution with i.i.d variance (0, $\sigma^2$); $\phi(x)$and$\psi(x)$ are ARMA polynomials. Another Concept: Transformation to stationarity: $z_{n}=y_{n}-y_{n-1}$, where is the difference by $1^{st}$ order.
+
+Noted that ARIMA(p,1,q) Model is almost like a special ARMA(p+1,q) Model with a unit root, due to the strong serial dependence identified from the sample ACFs, we consider the differenced data $\textit{chg}$: monthly MCSI after detrend instead of original data $\textit{csent}$.
+
+$\textbf{Since we are using differenced data, there is no need to build ARIMA model and we could use ARMA model direclty to represent ARIMA model}$
+
+Thus, we would say ARMA model in convenience but actually it is an ARIMA model based on not transformed data.
+
+Check AIC table for different ARMA model based on $\textit{chg}$.
+
+```{r, results='hide',message=FALSE,echo=FALSE,warning=FALSE}
+aic_table <- function(data,P,Q){
+  table <- matrix(NA,(P+1),(Q+1))
+  for(p in 0:P) {
+    for(q in 0:Q) {
+       table[p+1,q+1] <- arima(data,order=c(p,0,q))$aic
+    }
+  }
+  dimnames(table) <- list(paste("AR",0:P, sep=""),paste("MA",0:Q,sep=""))
+  table
+}
+midchgtable <- aic_table(chg,5,5)
+require(knitr)
+```
+
+```{r}
+kable(midchgtable,digits=3)
+chgmod<-arima(chg,order=c(3,0,3),include.mean=F)
+chgmod
+chgmod2<-arima(chg,order=c(5,0,0),include.mean=F)
+chgmod2
+```
+
+From the AIC table, since AIC is a good measurement of goodness of fit(profile log-likelihood) within considering the model size. Usually the lower AIC may give a better model, so ARMA(3,3) which has a lowest AIC should be considered. Also, the $\textbf{ARMA(5,0)}$(a.k.a AR(5)) is also a potential candidates because AIC value of AR(5,0) drops dramatically coompared to AIC value of AR(4,0). We should keep in mind that AIC table should not be over interpreted, and it's always necessary to check our model and test the significance of the model in the further step.
+
+## Exercise 6.5 Check the significance of model.
+
+```{r}
+AR_roots<-polyroot(c(1,-coef(chgmod)[c("ar1","ar2","ar3")]))
+abs(AR_roots)
+MA_roots<-polyroot(c(1,-coef(chgmod)[c("ma1","ma2","ma3")]))
+abs(MA_roots)
+```
+
+From output of ARMA(3,3) model, the absolute value roots of the AR polynomial are 1.4, 1.0, 1.0. two of three are close the unit circle, suggests we may have a non-causality issue from this model. In addition, the absolute value roots of the MA are 0.91, 1.46, 0.91. It will also cause the non-invertibaility issue. ARMA(3,3) model is problematic in this case.
+
+```{r}
+AR_roots2<-polyroot(c(1,-coef(chgmod2)[c("ar1","ar2","ar3","ar4","ar5")]))
+abs(AR_roots2)
+```
+
+From output of ARMA(3,3) model, the absolute value roots of the AR polynomial are all around 1.5,1.6 which are outside the unit circle. Therefore, the stochastic business cycles exist in the change series of consumer sentiment. We could assume ARMA(5,0) model is more appropriate in the trend of MSCI analysis.
+
+Construct a 95% Confidence Interval and see if the ar roots from AMRA(5,0) is significant.
+
+```{r}
+confint(chgmod2)
+```
+
+From the confidence intervals, we see that $\phi_{2}$,$\phi_{3}$,$\phi_{5}$are significant coefficients for the model. However, since 0 is in the range of the confidence interval for $\phi_{1}$ and $\phi_{4}$, there is not enough evidence to conclude that those two parameters are significant in our model, Even though the interval are just beyond the 0 threshold. (The inspiration of this part is from a previous midterm prject: Currency Exchange Rate between USD and JPY)
+
+## Exercise 6.6 Residual Analysis.
+
+```{r}
+#We use the R package(forecast)
+checkresiduals(chgmod2)
+```
+
+The first graph(Residual plot) shows that residuals oscillate over time, it can be observed that residuals deviated from zero, which is consistent with the pattern of gaussian white noise. Then, looking at the second graph (ACF of the residuals), additional serial correlations are not shown since no lag shows suspicious correlations between lags. From the third plot, the histogram of residuals are in a good shape of normal distribution(mean=0), so that we have evidence to say our white noise {$\epsilon_{n}$} meets the Normality assumption with zero mean and constant variance (0, $\sigma^2$).
+
+Box-Ljung test is not required in the class, but it is an alternative method to verify if the residuals are white noise, which does not contain serial dependence.
+
+```{r}
+#using the Box-Ljung test
+Box.test(chgmod2$residuals,lag=12,type='Ljung')
+```
+
+We set the lag=12 because we want to check if we could reject the null hypothesis that residuals have no auto correlation in the first 12 months. The very large p-value tells us that we can not reject the NH so that ARMA(5,0) model doesn't violate the residual assumptions.
+
+## Exercise 6.7.Spectrum Analysis and Periodic Interpretation
+
+```{r}
+#First, do the unsmoothed periodogram
+Spec0<-spectrum(chg, main = "Unsmoothed periodogram in pgram estimation")
+#Next, do the smoothed periodogram with span(3,6,3)
+Spec1<-spectrum(chg, spans=c(3,6,3), main = "Smoothed periodogram")
+a<-Spec1$freq[which.max(Spec1$spec)]
+1/a
+```
+
+We construct the spectrum density plot with unsmoothed before, despite it is an inconsistent estimator of the spectrum, we could still roughly find at the highest frequency: around 0.18, appears the dominant frequency which carries the highest spectrum. But we should focus on the smoothed sprectrum density plot and find the domiant frequency at smoothed one: the highest frequency is exactly 0.12, and it corresponds to the period to 8 months. Noticed that the second highest frequency is around 0.16, refers to a period of 6 months. Both periods indicate that the consumer confidence sentiment will behave as a cycle within 1 year, such as 8 months.
+
+$\textit{First plot is to test if our actual data fits the model.}$
+
+$\textit{Second plot is to use our model to predict the data over next 12 months.}$
+
+Here we use the $\textit{fore}$ function from the University of Chicago. From the first plot, most of the 24-month changed MCSI fall into the 95% interval forecasts for the 24-step ahead point at Jan. 2018 except one point around 499. This is a good fit for our actual data so that we can confidently produce good prediction outcomes of changed consumer sentiment from the fitted AMRA(5,0) model.
+
+Then we predict 12-month ahead and 95% interval forecasts for the differenced series of consumer sentiment at the forecast origin Jan. 2020. As indicated in the second forecasting plot, we predict that consumer sentiment will continue to follow the mean trend in the next following months. If we observe very carefully, the trend is increasing very slowly, but in the whole part, we assume this kind of increase is negligible.

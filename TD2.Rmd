@@ -1,0 +1,152 @@
+---
+title: "TP2 - Econometrics"
+output: 
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# Part-2 : Simulating stationary linear processes
+
+Before using economic or financial data, we propose to simulate autoregressive and moving average processes and to empirically evaluate their statistical properties. We will assume that the variables are centered in order to simplify the analysis.
+
+## Exercise 1 : The autoregressive process
+
+### 1.  Generate a Gaussian white noise process of 1000 observations with zero mean of 0 and σu2 = 1
+
+```{r}
+library(forecast)
+library(stats)
+set.seed(123)
+n <- 1000
+
+#Generation du bruit blanc : 
+bruit_blanc <- rnorm(n, mean = 0, sd = 1)
+
+```
+
+### 2.  We aim at simulating a second order stationary autoregressive process given by : yt = 0, 6yt−1 + 0, 2yt−2 + ut where ut ∼ N (0, σ2) (1) Use a "for" loop to generate the process given in (1). The initial condition can be set up to 0 ot to the first observation of the N(0, σ2).
+
+```{r, results='hide'}
+Yt_ar <- bruit_blanc[1:2] # On initialise l'AR avec les deux premières valeurs du bruit blanc
+for(i in 3:n){
+  Yt_ar[i] = 0.6*Yt_ar[i-1] + 0.2*Yt_ar[i-2] + bruit_blanc[i]
+}
+```
+
+### 3.  Plot the simulated process, its auto-covariance function, the autocorrelation function and the partial autocorrelation function as well. Are the results in line with the expectations ?
+
+```{r}
+library(ggplot2)
+df <- data.frame(x = 1:1000, y = Yt_ar)
+plot_AR2 <- ggplot(df,aes(x = df$x, y = df$y, col = "Yt (Processus AR(2) \n (on constate que le processus \n est stationnaire,\n ce qui est en accord avec nos hypothèses) ")) + geom_line() + xlab("Index (1~1000)") + ylab("Yt_AR") + ggtitle("Processus AR(2)")
+plot_AR2
+```
+```{r}
+auto_covariance_AR2 <- acf(Yt_ar, lag = 20, type = "covariance")
+auto_correlation_AR2 <- acf(Yt_ar, lag = 20, type = "correlation")
+pacf_AR2 <- pacf(x = Yt_ar, lag = 20)
+```
+
+
+### 4. Run and plot the Ljung-Box statistical test for 24 lags. Does the result of the test validate
+your initial diagnosis.
+
+
+```{r}
+Ljung_Box <- Box.test(Yt_ar, lag = 24, type = "Ljung-Box")
+p_value <- Ljung_Box$p.value
+p_value
+```
+<blockquote> Le test de Ljung-Box test si l'autocorrélation du processsus est d'ordre supérieur à 1 (ie : si il y'a dépendance des yt,...,yt-k). On constate que la p-value du test est largement inférieure à 0.05 et même à 0.01 donc pour un niveau de confiance de 99%, On peut affirmer que les réalisations sont dépendantes. </blockquote>
+
+### 5. Is the process given by 1 a stationary process ? Plot the root of the process within the unit circle.
+What is your conclusion ?
+
+```{r}
+circle <- arima(Yt_ar, order = c(2,0,0))
+plot(circle)
+```
+
+<blockquote> la fonction Arima permet de générer un modèle ajusté de processus, l'ordre permet d'indiquer quel processus est étudié order = (p,d,q) = (ordre AR, degré de différenciation, ordre MA ). Le resultat observé indique la non stationnarité du modèle car les racines sont toutes dans le cercle unitaire strictement. </blockquote> 
+## Exercise 2 : The moving average process
+We move now to the moving average process and propose to simulate the following MA(2) process :
+
+yt = ut + 0.5ut−1 + 0.3ut−2
+
+### 1. Use a "for" loop to generate to generate the process given by the equation 1. Check our result using the auto.sim function available under R (if necessary load the package arima.sim).
+
+```{r}
+set.seed(123)
+wn <- rnorm(1000, 0, 1)
+MA2 <- wn[1:2]
+for(t in 3:1000){
+  MA2[t] <- wn[t] + 0.5*wn[t-1] + 0.3*wn[t-2]
+}
+
+auto_MA2 <- arima.sim(list(order=c(0,0,2), ma= c (0.5, 0.3)), n = 1000, rand.gen = rnorm)
+
+df <- data.frame(x = 1:1000, y = MA2, z = auto_MA2)
+ggplot(data = df, aes(x = df$x, y = df$y, col = "MA2")) + geom_line() + geom_line(aes(y = df$z, col = "Auto MA2" )) + ylab("Generated MA Process")
+
+#Les valeurs initiales étant différentes, les processus ne sont pas superposés sur le graph
+```
+
+### 2. Plot the simulated process, its auto-covariance function and the autocorrelation function as well. Are the results in line with the expectations ?
+
+```{r}
+auto_covariance_MA2 <- acf(MA2, lag = 20, type = "covariance")
+auto_correlation_MA2 <- acf(MA2, lag = 20, type = "correlation")
+plot(auto_covariance_MA2)
+plot(auto_correlation_MA2)
+```
+Remarques : 
+Dans un processus MA l'acf décroit et forme une sinusoide alors que pour un AR, la fonction d'autocorrélation décroit seulement. 
+
+### 3. Run and plot the Ljun-Box (78) statistical test for 24 lags. Does the result of the test validate your first assessment.
+
+```{r}
+Ljung_Box2 <- Box.test(MA2, lag = 20, type = "Ljung-Box")
+Ljung_Box2
+```
+### 4. Is the process given by one a stationary process ? Why ? Is this process invertible ?
+
+```{r}
+circle <- arima(MA2, order = c(0,0,2))
+plot(circle)
+```
+<blockquote> Le processus n'est donc pas inversible car toutes les racines sont à l'interieur du cercle unitaire. </blockquote>
+
+## Exercise 3 : simulating an ARMA model
+
+```{r}
+#Generation du bruit blanc gaussien : 
+wn = rnorm(1000,0,1)
+#Generation de du Processus ARMA 
+Yt_arma = wn[1:2]
+for(t in 3:1000){
+  Yt_arma[t] <- 0.6*Yt_arma[t-1]-0.25*Yt_arma[t-2] + wn[t] + 1.1*wn[t-1] - 0.28*wn[t-2] 
+}
+df <- data.frame(x= 1:1000, ARMA= Yt_arma)
+auto.arma22 = arima.sim(list(order=c(2,0,2), ma=c (1.1, -0.28), ar=c(0.6,-0.25)), n=1000 , n.start = NA)
+arma <- ggplot(df, aes(x = df$x, y = df$ARMA, col = "Processus ARMA(2,2)")) + geom_line() + geom_line(aes(y = auto.arma22, col = "Auto arma"))
+arma
+```
+```{r}
+acf(Yt_arma, lag = 20, type = "covariance")
+acf(Yt_arma, lag = 20, type = "correlation")
+pacf(Yt_arma, lag = 20)
+```
+
+```{r}
+Ljung_Box3 <- Box.test(Yt_arma, lag = 20, type = "Ljung-Box")
+Ljung_Box3
+```
+```{r}
+circle <- arima(Yt_arma, order = c(2,0,2))
+plot(circle)
+```
+
